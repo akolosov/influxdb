@@ -63,6 +63,7 @@ func NewPlanner(db DB) *Planner {
 
 // Plan creates an execution plan for the given SelectStatement and returns an Executor.
 func (p *Planner) Plan(stmt *SelectStatement) (*Executor, error) {
+	trace()
 	now := p.Now()
 
 	// Clone the statement to be planned.
@@ -101,10 +102,12 @@ func (p *Planner) Plan(stmt *SelectStatement) (*Executor, error) {
 }
 
 func (p *Planner) planField(e *Executor, f *Field) (Processor, error) {
+	trace()
 	return p.planExpr(e, f.Expr)
 }
 
 func (p *Planner) planExpr(e *Executor, expr Expr) (Processor, error) {
+	trace()
 	switch expr := expr.(type) {
 	case *VarRef:
 		return p.planRawQuery(e, expr)
@@ -130,6 +133,7 @@ func (p *Planner) planExpr(e *Executor, expr Expr) (Processor, error) {
 
 // planCall generates a processor for a function call.
 func (p *Planner) planRawQuery(e *Executor, v *VarRef) (Processor, error) {
+	trace()
 	// Convert the statement to a simplified substatement for the single field.
 	stmt, err := e.stmt.Substatement(v)
 	if err != nil {
@@ -229,6 +233,7 @@ func (p *Planner) planCall(e *Executor, c *Call) (Processor, error) {
 // planBinaryExpr generates a processor for a binary expression.
 // A binary expression represents a join operator between two processors.
 func (p *Planner) planBinaryExpr(e *Executor, expr *BinaryExpr) (Processor, error) {
+	trace()
 	// Create processor for LHS.
 	lhs, err := p.planExpr(e, expr.LHS)
 	if err != nil {

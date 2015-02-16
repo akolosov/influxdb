@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"runtime"
+	//"runtime/debug"
 	"sort"
 	"strings"
 	"time"
@@ -293,18 +295,53 @@ func (m *Measurement) idsForExpr(n *influxql.BinaryExpr) (seriesIDs, bool, influ
 		return m.seriesIDs, true, n
 	}
 
-	// tag values can only be strings so if it's not a string this is an empty set
-	str, ok := value.(*influxql.StringLiteral)
+	// if it's a field we can't collapse it so we have to look at all series ids for this
+	if m.FieldByName(name.Val) != nil {
+		return m.seriesIDs, true, n
+	}
+
+	// ***********************************************************************************
+	// // tag values can only be strings so if it's not a string this is an empty set
+	// str, ok := value.(*influxql.StringLiteral)
+	// if !ok {
+	// 	return nil, true, nil
+	// }
+
+	// vals, ok := m.seriesByTagKeyValue[name.Val]
+	// if !ok {
+	// 	return nil, true, nil
+	// }
+
+	// return vals[str.Val], true, nil
+
+	// ***********************************************************************************
+	tagVals, ok := m.seriesByTagKeyValue[name.Val]
 	if !ok {
 		return nil, true, nil
 	}
 
-	vals, ok := m.seriesByTagKeyValue[name.Val]
-	if !ok {
-		return nil, true, nil
+	// if we're looking for series with a specific tag value
+	if str, ok := value.(*influxql.StringLiteral); ok {
+		return tagVals[str.Val], true, nil
 	}
 
-	return vals[str.Val], true, nil
+	// if we're looking for series with tag values that match a regex
+	if re, ok := value.(*influxql.RegexLiteral); ok {
+		fmt.Println("idsForExpr: influxql.RegexLiteral")
+		var ids seriesIDs
+		for k, _ := range tagVals {
+			match := re.Val.MatchString(k)
+
+			if (match && n.Op == influxql.EQREGEX) || (!match && n.Op == influxql.NEQREGEX) {
+				fmt.Printf("%s == %s\n", name.Val, k)
+				ids = ids.union(tagVals[k])
+			}
+		}
+		fmt.Printf("ids = %v\n", ids)
+		return ids, true, nil
+	}
+
+	return nil, true, nil
 }
 
 // walkWhereForSeriesIds will recursively walk the where clause and return a collection of series ids, a boolean indicating if this return
@@ -381,6 +418,10 @@ func (m *Measurement) walkWhereForSeriesIds(expr influxql.Expr, filters map[uint
 
 			// finally return the ids and say that we should include them
 			return ids, true, nil
+		} else if n.Op == influxql.EQREGEX || n.Op == influxql.NEQREGEX {
+			fmt.Println("walkWhereForSeriesIds: n.Op == influxql.*REGEX")
+			ids, shouldInclude, expr := m.idsForExpr(n)
+			return ids, shouldInclude, expr
 		}
 
 		return m.idsForExpr(n)
