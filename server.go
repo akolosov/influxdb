@@ -2151,9 +2151,7 @@ func (s *Server) executeShowMeasurementsStatement(stmt *influxql.ShowMeasurement
 		return &Result{Err: ErrDatabaseNotFound}
 	}
 
-	// Get all measurements in sorted order.
-	measurements := db.Measurements()
-	sort.Sort(measurements)
+	var measurements Measurements
 
 	// If a WHERE clause was specified, filter the measurements.
 	if stmt.Condition != nil {
@@ -2162,7 +2160,11 @@ func (s *Server) executeShowMeasurementsStatement(stmt *influxql.ShowMeasurement
 		if err != nil {
 			return &Result{Err: err}
 		}
+	} else {
+		// Otherwise, get all measurements from the database.
+		measurements = db.Measurements()
 	}
+	sort.Sort(measurements)
 
 	offset := stmt.Offset
 	limit := stmt.Limit
@@ -2327,8 +2329,7 @@ func (s *Server) executeShowContinuousQueriesStatement(stmt *influxql.ShowContin
 // filterMeasurementsByExpr filters a list of measurements by a tags expression.
 func filterMeasurementsByExpr(measurements Measurements, expr influxql.Expr) (Measurements, error) {
 	// Create a list to hold result measurements.
-	filtered := make(Measurements, 0)
-
+	filtered := Measurements{}
 	// Iterate measurements adding the ones that match to the result.
 	for _, m := range measurements {
 		// Look up series IDs that match the tags expression.
@@ -2362,12 +2363,16 @@ func (s *Server) executeShowFieldKeysStatement(stmt *influxql.ShowFieldKeysState
 		return &Result{Err: err}
 	}
 
+	fmt.Printf("measurements (before) = %#v\n", len(measurements))
+
 	// If the statement has a where clause, filter the measurements by it.
 	if stmt.Condition != nil {
 		if measurements, err = filterMeasurementsByExpr(measurements, stmt.Condition); err != nil {
 			return &Result{Err: err}
 		}
 	}
+
+	fmt.Printf("measurements (after) = %#v\n", len(measurements))
 
 	// Make result.
 	result := &Result{

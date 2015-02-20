@@ -1507,7 +1507,8 @@ func TestHandler_serveShowSeries(t *testing.T) {
 		{"name": "cpu", "tags": {"host": "server01", "region": "uswest"},"timestamp": "2009-11-10T23:00:00Z","values": {"value": 100}},
 		{"name": "cpu", "tags": {"host": "server01", "region": "useast"},"timestamp": "2009-11-10T23:00:00Z","values": {"value": 100}},
 		{"name": "cpu", "tags": {"host": "server02", "region": "useast"},"timestamp": "2009-11-10T23:00:00Z","values": {"value": 100}},
-		{"name": "gpu", "tags": {"host": "server02", "region": "useast"},"timestamp": "2009-11-10T23:00:00Z","values": {"value": 100}}
+		{"name": "gpu", "tags": {"host": "server02", "region": "useast"},"timestamp": "2009-11-10T23:00:00Z","values": {"value": 100}},
+		{"name": "gpu", "tags": {"host": "server03", "region": "caeast"},"timestamp": "2009-11-10T23:00:00Z","values": {"value": 100}}
 		]}`)
 
 	if status != http.StatusOK {
@@ -1542,6 +1543,7 @@ func TestHandler_serveShowSeries(t *testing.T) {
 								Columns: []string{"host", "region"},
 								Values: [][]interface{}{
 									str2iface([]string{"server02", "useast"}),
+									str2iface([]string{"server03", "caeast"}),
 								},
 							},
 						},
@@ -1612,6 +1614,47 @@ func TestHandler_serveShowSeries(t *testing.T) {
 				},
 			},
 		},
+
+		// SHOW SERIES WHERE =~ regex
+		{
+			q: `SHOW SERIES WHERE region =~ 'ca.*'`,
+			r: &influxdb.Results{
+				Results: []*influxdb.Result{
+					{
+						Rows: []*influxql.Row{
+							{
+								Name:    "gpu",
+								Columns: []string{"host", "region"},
+								Values: [][]interface{}{
+									str2iface([]string{"server03", "caeast"}),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+
+		// SHOW SERIES WHERE !~ regex
+		{
+			q: `SHOW SERIES WHERE host !~ 'server0[12]'`,
+			r: &influxdb.Results{
+				Results: []*influxdb.Result{
+					{
+						Rows: []*influxql.Row{
+							{
+								Name:    "gpu",
+								Columns: []string{"host", "region"},
+								Values: [][]interface{}{
+									str2iface([]string{"server03", "caeast"}),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+
 		// SHOW SERIES FROM ... WHERE
 		{
 			q: `SHOW SERIES FROM cpu WHERE region = 'useast'`,
@@ -1652,9 +1695,12 @@ func TestHandler_serveShowSeries(t *testing.T) {
 		}
 
 		if !reflect.DeepEqual(tt.err, errstring(r.Err)) {
+			t.Logf("query #%d: %s", i, tt.q)
 			t.Errorf("%d. %s: error mismatch:\n  exp=%s\n  got=%s\n\n", i, tt.q, tt.err, r.Err)
 		} else if tt.err == "" && !reflect.DeepEqual(tt.r, r) {
-			t.Log(body)
+			t.Logf("query #%d: %s", i, tt.q)
+			t.Logf("exp = %s", mustMarshalJSON(tt.r))
+			t.Logf("got = %s", body)
 			t.Errorf("%d. %s: result mismatch:\n\nexp=%#v\n\ngot=%#v\n\n", i, tt.q, tt.r, r)
 		}
 	}
@@ -1681,7 +1727,9 @@ func TestHandler_serveShowMeasurements(t *testing.T) {
 		{"name": "cpu", "tags": {"host": "server01", "region": "uswest"},"timestamp": "2009-11-10T23:00:00Z","values": {"value": 100}},
 		{"name": "cpu", "tags": {"host": "server01", "region": "useast"},"timestamp": "2009-11-10T23:00:00Z","values": {"value": 100}},
 		{"name": "cpu", "tags": {"host": "server02", "region": "useast"},"timestamp": "2009-11-10T23:00:00Z","values": {"value": 100}},
-		{"name": "gpu", "tags": {"host": "server02", "region": "useast"},"timestamp": "2009-11-10T23:00:00Z","values": {"value": 100}}
+		{"name": "gpu", "tags": {"host": "server02", "region": "useast"},"timestamp": "2009-11-10T23:00:00Z","values": {"value": 100}},
+		{"name": "gpu", "tags": {"host": "server02", "region": "caeast"},"timestamp": "2009-11-10T23:00:00Z","values": {"value": 100}},
+		{"name": "other", "tags": {"host": "server03", "region": "caeast"},"timestamp": "2009-11-10T23:00:00Z","values": {"value": 100}}
 		]}`)
 
 	if status != http.StatusOK {
@@ -1698,6 +1746,18 @@ func TestHandler_serveShowMeasurements(t *testing.T) {
 		{
 			q: `SHOW MEASUREMENTS LIMIT 2`,
 			r: `{"results":[{"rows":[{"name":"measurements","columns":["name"],"values":[["cpu"],["gpu"]]}]}]}`,
+		},
+
+		// SHOW MEASUREMENTS WHERE =~ regex
+		{
+			q: `SHOW MEASUREMENTS WHERE region =~ 'ca.*'`,
+			r: `{"results":[{"rows":[{"name":"measurements","columns":["name"],"values":[["gpu"],["other"]]}]}]}`,
+		},
+
+		// SHOW MEASUREMENTS WHERE !~ regex
+		{
+			q: `SHOW MEASUREMENTS WHERE region !~ 'ca.*'`,
+			r: `{"results":[{"rows":[{"name":"measurements","columns":["name"],"values":[["cpu"]]}]}]}`,
 		},
 	}
 
@@ -1848,7 +1908,8 @@ func TestHandler_serveShowTagValues(t *testing.T) {
 		{"name": "cpu", "tags": {"host": "server01", "region": "uswest"},"timestamp": "2009-11-10T23:00:00Z","values": {"value": 100}},
 		{"name": "cpu", "tags": {"host": "server01", "region": "useast"},"timestamp": "2009-11-10T23:00:00Z","values": {"value": 100}},
 		{"name": "cpu", "tags": {"host": "server02", "region": "useast"},"timestamp": "2009-11-10T23:00:00Z","values": {"value": 100}},
-		{"name": "gpu", "tags": {"host": "server02", "region": "useast"},"timestamp": "2009-11-10T23:00:00Z","values": {"value": 100}}
+		{"name": "gpu", "tags": {"host": "server02", "region": "useast"},"timestamp": "2009-11-10T23:00:00Z","values": {"value": 100}},
+		{"name": "gpu", "tags": {"host": "server03", "region": "caeast"},"timestamp": "2009-11-10T23:00:00Z","values": {"value": 100}}
 		]}`)
 
 	if status != http.StatusOK {
@@ -1881,6 +1942,7 @@ func TestHandler_serveShowTagValues(t *testing.T) {
 								Columns: []string{"tagValue"},
 								Values: [][]interface{}{
 									str2iface([]string{"server02"}),
+									str2iface([]string{"server03"}),
 								},
 							},
 						},
@@ -1927,6 +1989,44 @@ func TestHandler_serveShowTagValues(t *testing.T) {
 				},
 			},
 		},
+		// SHOW TAG VALUES FROM ... WHERE =~ regex
+		{
+			q: `SHOW TAG VALUES WITH KEY = host WHERE region =~ 'ca.*'`,
+			r: &influxdb.Results{
+				Results: []*influxdb.Result{
+					{
+						Rows: []*influxql.Row{
+							{
+								Name:    "gpu",
+								Columns: []string{"tagValue"},
+								Values: [][]interface{}{
+									str2iface([]string{"server03"}),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		// SHOW TAG VALUES FROM ... WHERE !~ regex
+		{
+			q: `SHOW TAG VALUES WITH KEY = region WHERE host !~ 'server0[12]'`,
+			r: &influxdb.Results{
+				Results: []*influxdb.Result{
+					{
+						Rows: []*influxql.Row{
+							{
+								Name:    "gpu",
+								Columns: []string{"tagValue"},
+								Values: [][]interface{}{
+									str2iface([]string{"caeast"}),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 		// SHOW TAG VALUES FROM ... WITH KEY IN ... WHERE ...
 		{
 			q: `SHOW TAG VALUES FROM cpu WITH KEY IN (host, region) WHERE region = 'uswest'`,
@@ -1966,11 +2066,12 @@ func TestHandler_serveShowTagValues(t *testing.T) {
 		}
 
 		if !reflect.DeepEqual(tt.err, errstring(r.Err)) {
+			t.Logf("query #%d: %s", i, tt.q)
 			t.Errorf("%d. %s: error mismatch:\n  exp=%s\n  got=%s\n\n", i, tt.q, tt.err, r.Err)
 		} else if tt.err == "" && !reflect.DeepEqual(tt.r, r) {
-			b, _ := json.Marshal(tt.r)
-			t.Log(string(b))
-			t.Log(body)
+			t.Logf("query #%d: %s", i, tt.q)
+			t.Logf("exp = %s", mustMarshalJSON(tt.r))
+			t.Logf("got = %s", body)
 			t.Errorf("%d. %s: result mismatch:\n\nexp=%#v\n\ngot=%#v\n\n", i, tt.q, tt.r, r)
 		}
 	}
@@ -1989,7 +2090,8 @@ func TestHandler_serveShowFieldKeys(t *testing.T) {
 		{"name": "cpu", "tags": {"host": "server01", "region": "uswest"},"timestamp": "2009-11-10T23:00:00Z","values": {"field1": 200, "field2": 300, "field3": 400}},
 		{"name": "cpu", "tags": {"host": "server01", "region": "useast"},"timestamp": "2009-11-10T23:00:00Z","values": {"field1": 200, "field2": 300, "field3": 400}},
 		{"name": "cpu", "tags": {"host": "server02", "region": "useast"},"timestamp": "2009-11-10T23:00:00Z","values": {"field1": 200, "field2": 300, "field3": 400}},
-		{"name": "gpu", "tags": {"host": "server01", "region": "useast"},"timestamp": "2009-11-10T23:00:00Z","values": {"field4": 200, "field5": 300}}
+		{"name": "gpu", "tags": {"host": "server01", "region": "useast"},"timestamp": "2009-11-10T23:00:00Z","values": {"field4": 200, "field5": 300}},
+		{"name": "gpu", "tags": {"host": "server03", "region": "caeast"},"timestamp": "2009-11-10T23:00:00Z","values": {"field6": 200, "field7": 300}}
 		]}`)
 
 	if status != http.StatusOK {
@@ -2053,8 +2155,39 @@ func TestHandler_serveShowFieldKeys(t *testing.T) {
 				},
 			},
 		},
+
+		// SHOW FIELD KEYS WHERE =~ regex
+		{
+			q: `SHOW FIELD KEYS WHERE host =~ 'server0[23]'`,
+			r: &influxdb.Results{
+				Results: []*influxdb.Result{
+					{
+						Rows: []*influxql.Row{
+							{
+								Name:    "cpu",
+								Columns: []string{"fieldKey"},
+								Values: [][]interface{}{
+									str2iface([]string{"field1"}),
+									str2iface([]string{"field2"}),
+									str2iface([]string{"field3"}),
+								},
+							},
+							{
+								Name:    "gpu",
+								Columns: []string{"fieldKey"},
+								Values: [][]interface{}{
+									str2iface([]string{"field6"}),
+									str2iface([]string{"field7"}),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 	for i, tt := range tests {
+		fmt.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 		query := map[string]string{"db": "foo", "q": tt.q}
 		status, body = MustHTTP("GET", s.URL+`/query`, query, nil, "")
 
@@ -2072,13 +2205,15 @@ func TestHandler_serveShowFieldKeys(t *testing.T) {
 		}
 
 		if !reflect.DeepEqual(tt.err, errstring(r.Err)) {
+			t.Logf("query #%d: %s", i, tt.q)
 			t.Errorf("%d. %s: error mismatch:\n  exp=%s\n  got=%s\n\n", i, tt.q, tt.err, r.Err)
 		} else if tt.err == "" && !reflect.DeepEqual(tt.r, r) {
-			b, _ := json.Marshal(tt.r)
-			t.Log(string(b))
-			t.Log(body)
+			t.Logf("query #%d: %s", i, tt.q)
+			t.Logf("exp = %s", mustMarshalJSON(tt.r))
+			t.Logf("got = %s", body)
 			t.Errorf("%d. %s: result mismatch:\n\nexp=%#v\n\ngot=%#v\n\n", i, tt.q, tt.r, r)
 		}
+		fmt.Println("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 	}
 }
 
@@ -2288,4 +2423,13 @@ func errstring(err error) string {
 		return err.Error()
 	}
 	return ""
+}
+
+// marshalJSON marshals input to a string of JSON or panics on error.
+func mustMarshalJSON(i interface{}) string {
+	b, err := json.Marshal(i)
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
 }
