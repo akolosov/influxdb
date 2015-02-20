@@ -5,19 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
 )
-
-func trace() {
-	pc := make([]uintptr, 10) // at least 1 entry needed
-	runtime.Callers(2, pc)
-	f := runtime.FuncForPC(pc[0])
-	file, line := f.FileLine(pc[0])
-	fmt.Printf("%s:%d %s\n", file, line, f.Name())
-}
 
 // DataType represents the primitive data types available in InfluxQL.
 type DataType string
@@ -801,7 +792,6 @@ WHERE yyy.region == "uswest"
 
 // Substatement returns a single-series statement for a given variable reference.
 func (s *SelectStatement) Substatement(ref *VarRef) (*SelectStatement, error) {
-	trace()
 	// Copy dimensions and properties to new statement.
 	other := &SelectStatement{
 		Fields:     Fields{{Expr: ref}},
